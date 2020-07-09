@@ -13,9 +13,11 @@ suppressPackageStartupMessages({
   library(DESeq2)
   library(patchwork)
   library(gt)
+  library(htmltools)
   library(org.Mm.eg.db)
   library(org.Hs.eg.db)
   library(stats)
+  library(scales)
 })
 
 # Set up summarizedExperiment ---------------------------------------------
@@ -68,29 +70,43 @@ treatment <- c("DMSO", "IVO", "ENTO", "R406", "ENTO.IVO", "R406.IVO")
 
 ui <- navbarPage(
   tabPanel("GSEA",
-    selectInput(inputId = "input_pathway", 
-                label = "Select Mouse Version of MSigDB",
-                choices = pathways_all
+    fluidRow(
+      column(6, 
+             selectInput(inputId = "input_reference_treatment",
+                         label = "Select Reference Samples",
+                         choices = treatment,
+                         selected = "DMSO"
+             ),
+             selectInput(inputId = "input_interest_treatment",
+                         label = "Select Samples of Interest",
+                         choices = treatment,
+                         selected = "IVO"
+             ),
+             actionButton(inputId = "input_samples",
+                          label = "UPDATE SAMPLES"
+             )
+      ),
+      column(6, 
+             selectInput(inputId = "input_pathway", 
+                         label = "Select Mouse Version of MSigDB",
+                         choices = pathways_all
+             ),
+             sliderInput(inputId = "input_fill_fdr_cutoff",
+                         label = "Select FDR Cutoff in fGSEA for Colouring Barplots",
+                         min=0, max=1, step = 0.01, value = .1
+             )
+      
+      )
     ),
-    sliderInput(inputId = "input_fill_fdr_cutoff",
-                label = "Select FDR Cutoff in fGSEA for Colouring Barplots",
-                min=0, max=1, step = 0.01, value = .1
-                ),
-    #setting reference treatment
-    selectInput(inputId = "input_reference_treatment",
-                label = "Select Reference Samples",
-                choices = treatment,
-                selected = "DMSO"
+    
+    fluidRow(
+      column(6, dataTableOutput("DESeq2_enr_table")),
+      column(6, dataTableOutput("DESeq2_dpl_table"))
     ),
-    selectInput(inputId = "input_interest_treatment",
-                label = "Select Samples of Interest",
-                choices = treatment,
-                selected = "IVO"
-    ),
-    actionButton(inputId = "input_samples",
-                 label = "UPDATE SAMPLES"
-                 ),
-    plotOutput("temp_plot")
+    
+    
+    plotOutput("temp_plot"),
+    
   ),
   
   #tab panel for venn
@@ -217,6 +233,27 @@ server <- function(input, output){
   #temp-genesets in c7 that contain mecom
   ls <- readRDS("www/MSigDB_mmu_version/Mm.c7.all.v7.1.entrez.rds") 
   
+  
+  output$DESeq2_enr_table <- renderDataTable(
+    {
+      reslfc_s1s2() %>% 
+        subset(log2FoldChange >= 0) %>% 
+        as.data.frame() %>% 
+        mutate_if(is.numeric, scientific)
+    }, 
+    options = list(scrollY = "500px")
+    )
+  
+  output$DESeq2_dpl_table <- renderDataTable(
+    {
+      reslfc_s1s2() %>% 
+        subset(log2FoldChange <= 0) %>% 
+        as.data.frame() %>% 
+        mutate_if(is.numeric, scientific)
+    }, 
+    options = list(scrollY = "500px")
+    )
+  
   output$temp_plot <- renderPlot({
     ggplot(temp_res()
            , aes(reorder(pathway, NES), NES)) + 
@@ -224,6 +261,8 @@ server <- function(input, output){
       coord_flip()
   }
   )
+  
+  
   
 }
 
